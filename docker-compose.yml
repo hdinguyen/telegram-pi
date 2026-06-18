@@ -1,0 +1,13 @@
+services:
+  telebot:
+    build: .
+    image: telebot
+    container_name: telebot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist the SQLite DB + per-group session JSONL files across restarts.
+      # DATABASE_PATH and SESSION_DIR are defined in the Dockerfile (/app/data).
+      # Bind mount so ./data is visible on the host machine.
+      - ./data:/app/data

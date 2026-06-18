@@ -1,0 +1,38 @@
+{
+  "name": "telebot",
+  "version": "1.0.0",
+  "description": "A Telegram Bot application",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test:agent": "node src/agent/test-agent.js",
+    "lint": "eslint src/",
+    "format": "prettier --write src/"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "telebot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.79.6",
+    "@earendil-works/pi-ai": "^0.79.6",
+    "@earendil-works/pi-coding-agent": "^0.79.6",
+    "@mozilla/readability": "^0.5.0",
+    "dotenv": "^16.4.5",
+    "linkedom": "^0.16.0",
+    "telegraf": "^4.16.3",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.5.0",
+    "prettier": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
