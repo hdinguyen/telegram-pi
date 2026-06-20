@@ -285,8 +285,12 @@ class TelegramBot {
         firstName: botInfo.first_name,
       });
 
-      // Launch bot
-      await this.bot.launch();
+      // Launch bot.
+      // NOTE: bot.launch() resolves only when the bot STOPS, so we must NOT
+      // await it here — otherwise execution blocks and no further code runs.
+      this.bot.launch().catch((error) => {
+        logger.error("Bot polling crashed:", error);
+      });
       this.isRunning = true;
 
       logger.info("Bot started polling for updates");
