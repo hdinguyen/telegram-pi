@@ -1,0 +1,11 @@
+{
+  "compaction": {
+    "enabled": true
+  },
+  "retry": {
+    "enabled": true,
+    "maxRetries": 3
+  },
+  "packages": ["npm:pi-web-access@latest"]
+}
+

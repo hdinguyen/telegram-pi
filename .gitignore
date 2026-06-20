@@ -42,3 +42,4 @@ temp/
 
 # Persisted data (SQLite DB + agent session files)
 data/
+pi/

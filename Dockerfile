@@ -10,7 +10,7 @@ RUN apk add --no-cache curl bash ffmpeg yt-dlp \
 ENV PI_CODING_AGENT_DIR=/app/.pi
 
 # Copy pi settings (declares packages + compaction/retry config), then install packages
-COPY .pi/settings.json /app/.pi/settings.json
+COPY settings.json /app/.pi/settings.json
 RUN pi install npm:pi-web-access
 
 # Install dependencies first to leverage layer caching

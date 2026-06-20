@@ -11,3 +11,6 @@ services:
       # DATABASE_PATH and SESSION_DIR are defined in the Dockerfile (/app/data).
       # Bind mount so ./data is visible on the host machine.
       - ./data:/app/data
+      # Persist pi's coding-agent dir (PI_CODING_AGENT_DIR=/app/.pi):
+      # settings.json + installed packages. Bind mount to ./pi on the host.
+      - ./pi:/app/.pi
