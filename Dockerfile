@@ -11,6 +11,7 @@ ENV PI_CODING_AGENT_DIR=/app/.pi
 
 # Copy pi settings (declares packages + compaction/retry config), then install packages
 COPY settings.json /app/.pi/settings.json
+COPY ./init/APPEND_SYSTEM.md /app/.pi/APPEND_SYSTEM.md
 RUN pi install npm:pi-web-access
 
 # Install dependencies first to leverage layer caching
