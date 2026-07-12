@@ -1,6 +1,7 @@
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
 import { logger } from "../utils/logger.js";
+import { allowedUserStore } from "../db/database.js";
 
 /**
  * Message history storage
@@ -149,29 +150,55 @@ class TelegramBot {
         const chatType = ctx.chat.type;
         const isPrivateChat = chatType === "private";
 
-        // Allowlist gating: when AVAILABLE is set, only that username may
-        // trigger the bot. Determine whether this message is even directed
-        // at the bot (DM, or mention in a group) before gating.
-        const allowedUsername = (process.env.AVAILABLE || "").trim();
-        const senderUsername = ctx.from?.username || "";
+        // Never let the agent process bot commands (messages like "/allow ...").
+        // Registered commands (/allow, /deny, /allowlist) are intercepted by
+        // their own handlers earlier in the middleware chain; this guard ensures
+        // that even unregistered commands are ignored here instead of being sent
+        // to the agent for a response.
+        const isBotCommand =
+          (ctx.message.entities || []).some(
+            (e) => e.type === "bot_command" && e.offset === 0,
+          ) || text.startsWith("/");
+        if (isBotCommand) {
+          logger.debug("⏭️  Skipping bot command in agent handler", {
+            chatId: ctx.chat.id,
+            text: text.substring(0, 50),
+          });
+          return next();
+        }
 
-        if (allowedUsername) {
+        // Allowlist gating: the bot only serves users on the allowlist, which is
+        // the UNION of two sources:
+        //   1. the AVAILABLE env var (comma-separated bootstrap allowlist), and
+        //   2. the database-backed allowlist managed at runtime via /allow & /deny.
+        // A user is permitted if they appear in either source. Determine whether
+        // this message is even directed at the bot (DM, or mention in a group)
+        // before gating.
+        const envUsernames = (process.env.AVAILABLE || "")
+          .split(",")
+          .map((u) => u.trim().toLowerCase())
+          .filter(Boolean);
+        const dbUsernames = allowedUserStore
+          .list()
+          .map((u) => u.trim().toLowerCase())
+          .filter(Boolean);
+        const allowedUsernames = [...new Set([...envUsernames, ...dbUsernames])];
+        const senderUsername = (ctx.from?.username || "").toLowerCase();
+
+        if (allowedUsernames.length) {
           const botTargeted =
             isPrivateChat || this._isBotMentioned(mentions, text, chatType);
 
-          if (
-            botTargeted &&
-            senderUsername.toLowerCase() !== allowedUsername.toLowerCase()
-          ) {
+          if (botTargeted && !allowedUsernames.includes(senderUsername)) {
             logger.info("🚫 Blocked non-allowlisted user", {
               chatId: ctx.chat.id,
               chatType,
               from: senderUsername || ctx.from?.first_name,
-              allowedUsername,
+              allowedUsernames,
             });
 
             await ctx.reply(
-              `I'm still on private test, only serving ${allowedUsername}, sorry for the inconvenience`,
+              `I'm still on private test, only serving ${allowedUsernames.join(", ")}, sorry for the inconvenience`,
               { reply_to_message_id: ctx.message.message_id },
             );
             return next();
