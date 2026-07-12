@@ -245,6 +245,45 @@ export class PiAgent {
   }
 
   /**
+   * Reload skills/resources without restarting the process.
+   * Existing live sessions must be reloaded so their system prompts are rebuilt
+   * with the newly discovered skill list. If no sessions are live yet, reload
+   * only the shared resource loader; future sessions will use the new skills.
+   * @returns {Promise<{skills: string[], diagnostics: Array, reloadedSessions: number}>}
+   */
+  async reloadSkills() {
+    if (!this.isInitialized) {
+      throw new Error("Agent not initialized. Call initialize() first.");
+    }
+
+    let reloadedSessions = 0;
+
+    if (this.sessions.size === 0) {
+      await this.loader.reload();
+    } else {
+      for (const [chatId, entry] of this.sessions) {
+        logger.info(`Reloading agent resources for chat ${chatId}`);
+        await entry.session.reload();
+        reloadedSessions += 1;
+      }
+    }
+
+    const { skills, diagnostics } = this.loader.getSkills();
+    const skillNames = skills.map((s) => s.name);
+
+    logger.info("Reloaded skills:", skillNames);
+    if (diagnostics.length > 0) {
+      logger.warn("Skill reload diagnostics:", diagnostics);
+    }
+
+    return {
+      skills: skillNames,
+      diagnostics,
+      reloadedSessions,
+    };
+  }
+
+  /**
    * Dispose a single group's live session (keeps the persisted file on disk).
    * @param {string|number} chatId
    */

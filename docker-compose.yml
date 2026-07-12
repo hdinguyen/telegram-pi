@@ -14,3 +14,7 @@ services:
       # Persist pi's coding-agent dir (PI_CODING_AGENT_DIR=/app/.pi):
       # settings.json + installed packages. Bind mount to ./pi on the host.
       - ./pi:/app/.pi
+      # Live-edit custom skills from the host without rebuilding the image.
+      # Add skills under ./.pi/skills/<skill-name>/SKILL.md; inside the
+      # container they appear at /app/.pi/skills/.
+      - ./.pi/skills:/app/.pi/skills

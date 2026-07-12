@@ -1,3 +1,5 @@
+import { piAgent } from "../agent/index.js";
+import { getAgentOptions } from "../agent/config.js";
 import { allowedUserStore, AllowedUserStore } from "../db/database.js";
 import { logger } from "../utils/logger.js";
 
@@ -22,7 +24,9 @@ function isAdmin(username) {
  * Pull the first argument from a command message, e.g. "/allow @bob" -> "bob".
  */
 function parseTarget(text) {
-  const parts = String(text || "").trim().split(/\s+/);
+  const parts = String(text || "")
+    .trim()
+    .split(/\s+/);
   return parts.length > 1 ? parts[1] : "";
 }
 
@@ -55,9 +59,7 @@ export function registerAdminCommands(bot) {
     logger.info("✅ /allow", { admin: requester, target: name, changed });
 
     return ctx.reply(
-      changed
-        ? `Allowed @${name}.`
-        : `@${name} is already allowed.`,
+      changed ? `Allowed @${name}.` : `@${name} is already allowed.`,
       { reply_to_message_id: ctx.message.message_id },
     );
   });
@@ -83,9 +85,7 @@ export function registerAdminCommands(bot) {
     logger.info("🛑 /deny", { admin: requester, target: name, changed });
 
     return ctx.reply(
-      changed
-        ? `Denied @${name}.`
-        : `@${name} was not on the allowlist.`,
+      changed ? `Denied @${name}.` : `@${name} was not on the allowlist.`,
       { reply_to_message_id: ctx.message.message_id },
     );
   });
@@ -108,5 +108,52 @@ export function registerAdminCommands(bot) {
     );
   });
 
-  logger.info("Access-control commands registered (/allow, /deny, /allowlist)");
+  tg.command("reloadskills", async (ctx) => {
+    const requester = ctx.from?.username;
+    if (!isAdmin(requester)) {
+      logger.info("🚫 Non-admin tried /reloadskills", { from: requester });
+      return ctx.reply("Only an admin can use this command.", {
+        reply_to_message_id: ctx.message.message_id,
+      });
+    }
+
+    try {
+      if (!piAgent.isInitialized) {
+        logger.info("⚙️ Initializing Pi Agent for /reloadskills...");
+        await piAgent.initialize(getAgentOptions());
+      }
+
+      const result = await piAgent.reloadSkills();
+      logger.info("🔄 /reloadskills", {
+        admin: requester,
+        skills: result.skills,
+        diagnostics: result.diagnostics.length,
+        reloadedSessions: result.reloadedSessions,
+      });
+
+      const skillsText = result.skills.length
+        ? result.skills.map((name) => `• ${name}`).join("\n")
+        : "No skills loaded.";
+      const diagnosticsText = result.diagnostics.length
+        ? `\n\nDiagnostics: ${result.diagnostics.length} warning(s). Check logs.`
+        : "";
+
+      return ctx.reply(
+        `Reloaded skills (${result.skills.length}).\n` +
+          `Live sessions refreshed: ${result.reloadedSessions}.\n\n` +
+          skillsText +
+          diagnosticsText,
+        { reply_to_message_id: ctx.message.message_id },
+      );
+    } catch (error) {
+      logger.error("Failed to reload skills:", error);
+      return ctx.reply("❌ Failed to reload skills. Check logs for details.", {
+        reply_to_message_id: ctx.message.message_id,
+      });
+    }
+  });
+
+  logger.info(
+    "Access-control commands registered (/allow, /deny, /allowlist, /reloadskills)",
+  );
 }
