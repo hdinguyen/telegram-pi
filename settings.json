@@ -6,6 +6,10 @@
     "enabled": true,
     "maxRetries": 3
   },
-  "packages": ["npm:pi-web-access@latest"]
+  "packages": [
+    "npm:pi-web-access@latest",
+    "npm:pi-blackhole",
+    "npm:pi-lynx"
+  ]
 }
 
