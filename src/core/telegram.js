@@ -36,6 +36,30 @@ function formatFileSize(bytes) {
   return `${size.toFixed(precision)} ${units[unitIndex]}`;
 }
 
+const POLLING_ALLOWED_UPDATES = [
+  // Telegram's default update set, explicitly listed so we can opt in to
+  // reaction updates without accidentally disabling existing message flows.
+  "message",
+  "edited_message",
+  "channel_post",
+  "edited_channel_post",
+  "inline_query",
+  "chosen_inline_result",
+  "callback_query",
+  "shipping_query",
+  "pre_checkout_query",
+  "poll",
+  "poll_answer",
+  "my_chat_member",
+  "chat_join_request",
+  "chat_boost",
+  "removed_chat_boost",
+  // Reactions are excluded from Telegram's default allowed_updates and must be
+  // requested explicitly. The bot must also be an admin in the chat.
+  "message_reaction",
+  "message_reaction_count",
+];
+
 function describeReactionType(reactionType) {
   if (!reactionType) {
     return "unknown";
@@ -365,15 +389,32 @@ class TelegramBot {
       const reactionUpdate = ctx.update.message_reaction;
 
       if (reactionUpdate) {
+        const oldReactions =
+          reactionUpdate.old_reaction?.map(describeReactionType) || [];
+        const newReactions =
+          reactionUpdate.new_reaction?.map(describeReactionType) || [];
+        const added = ctx.reactions?.added
+          ?.toArray?.()
+          ?.map(describeReactionType);
+        const removed = ctx.reactions?.removed
+          ?.toArray?.()
+          ?.map(describeReactionType);
         const reactionSummary = {
+          updateType: ctx.updateType,
+          updateId: ctx.update.update_id,
           chatId: reactionUpdate.chat.id,
           chatType: reactionUpdate.chat.type,
+          chatTitle: reactionUpdate.chat.title,
           messageId: reactionUpdate.message_id,
           fromUser: ctx.from?.username || ctx.from?.first_name,
-          added: ctx.reactions?.added?.toArray?.()?.map(describeReactionType),
-          removed: ctx.reactions?.removed?.toArray?.()?.map(describeReactionType),
+          fromUserId: ctx.from?.id,
+          oldReactions,
+          newReactions,
+          added,
+          removed,
         };
 
+        logger.debug("❤️ Message reaction debug", reactionSummary);
         logger.info("❤️ Reaction updated", reactionSummary);
       }
 
@@ -389,12 +430,18 @@ class TelegramBot {
           total: reaction.total_count,
         }));
 
-        logger.info("🔢 Reaction count updated", {
+        const countSummary = {
+          updateType: ctx.updateType,
+          updateId: ctx.update.update_id,
           chatId: countUpdate.chat.id,
           chatType: countUpdate.chat.type,
+          chatTitle: countUpdate.chat.title,
           messageId: countUpdate.message_id,
           counts,
-        });
+        };
+
+        logger.debug("🔢 Message reaction count debug", countSummary);
+        logger.info("🔢 Reaction count updated", countSummary);
       }
 
       return next();
@@ -600,9 +647,16 @@ class TelegramBot {
       // Launch bot.
       // NOTE: bot.launch() resolves only when the bot STOPS, so we must NOT
       // await it here — otherwise execution blocks and no further code runs.
-      this.bot.launch().catch((error) => {
-        logger.error("Bot polling crashed:", error);
+      logger.info("Starting polling with explicit allowed updates", {
+        allowedUpdates: POLLING_ALLOWED_UPDATES,
       });
+      this.bot
+        .launch({
+          allowedUpdates: POLLING_ALLOWED_UPDATES,
+        })
+        .catch((error) => {
+          logger.error("Bot polling crashed:", error);
+        });
       this.isRunning = true;
 
       logger.info("Bot started polling for updates");
