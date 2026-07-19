@@ -1,0 +1,9 @@
+{
+  "name": "vision-openrouter",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OpenRouter vision tool for pi-coding-agent",
+  "dependencies": {
+    "typebox": "^0.32.27"
+  }
+}

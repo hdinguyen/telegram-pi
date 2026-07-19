@@ -29,6 +29,8 @@ export class PiAgent {
 
     // chatId (string) -> { session, sessionManager }
     this.sessions = new Map();
+
+    this.sessionListeners = new Set();
   }
 
   /**
@@ -133,6 +135,19 @@ export class PiAgent {
     const entry = { session, sessionManager };
     this.sessions.set(key, entry);
 
+    for (const listener of this.sessionListeners) {
+      try {
+        listener({
+          session,
+          sessionManager,
+          chatId: key,
+          resumed,
+        });
+      } catch (error) {
+        logger.warn("Session listener error", error);
+      }
+    }
+
     logger.debug(
       `Session ready for chat ${key} (${resumed ? "resumed" : "new"}), ` +
         `${this.sessions.size} live session(s)`,
@@ -166,6 +181,16 @@ export class PiAgent {
       });
 
       const enhancedPrompt = this._buildPromptWithContext(query, context);
+
+      if (
+        context.imageIds &&
+        Array.isArray(context.imageIds) &&
+        context.imageIds.length > 0
+      ) {
+        session.context.set("telegramImageIds", context.imageIds);
+      } else {
+        session.context.delete("telegramImageIds");
+      }
 
       let responseText = "";
       const toolsUsed = [];
@@ -233,13 +258,66 @@ export class PiAgent {
       const recent = context.recentMessages.slice(-10);
       for (const msg of recent) {
         const sender = msg.from?.username || msg.from?.first_name || "User";
-        const text = msg.text || "[media]";
-        parts.push(`${sender}: ${text}`);
+        let contentLine = "";
+
+        if (msg.mediaType === "photo") {
+          const caption = msg.caption || msg.text || "";
+          const captionPart = caption ? ` caption: ${caption}` : "";
+          contentLine = `[photo${captionPart}]`;
+        } else if (msg.mediaType === "location" && msg.location) {
+          const { latitude, longitude } = msg.location;
+          const coord = `${latitude}, ${longitude}`;
+          const venueTitle = msg.location.venue?.title
+            ? ` title: ${msg.location.venue.title}`
+            : "";
+          contentLine = `[location ${coord}${venueTitle}]`;
+        } else {
+          contentLine = msg.text || msg.caption || "[message]";
+        }
+
+        parts.push(`${sender}: ${contentLine}`);
       }
       parts.push("</conversation_history>\n");
     }
 
-    parts.push(`\nUser query: ${query}`);
+    if (context.location && context.location.text) {
+      parts.push("\n<latest_location_message>");
+      parts.push(`Summary: ${context.location.text}`);
+
+      if (typeof context.location.horizontalAccuracy === "number") {
+        parts.push(
+          `Horizontal accuracy: ${context.location.horizontalAccuracy} meters`,
+        );
+      }
+      if (typeof context.location.livePeriod === "number") {
+        parts.push(
+          `Live location remaining: ${Math.round(
+            context.location.livePeriod,
+          )} seconds`,
+        );
+      }
+      if (typeof context.location.heading === "number") {
+        parts.push(`Heading: ${context.location.heading}°`);
+      }
+      if (typeof context.location.proximityAlertRadius === "number") {
+        parts.push(
+          `Proximity alert radius: ${context.location.proximityAlertRadius} meters`,
+        );
+      }
+
+      if (context.location.venue) {
+        if (context.location.venue.title) {
+          parts.push(`Venue title: ${context.location.venue.title}`);
+        }
+        if (context.location.venue.address) {
+          parts.push(`Venue address: ${context.location.venue.address}`);
+        }
+      }
+
+      parts.push("</latest_location_message>\n");
+    }
+
+    parts.push(`\nUser query: ${query || "[no text provided]"}`);
 
     return parts.join("\n");
   }
@@ -291,22 +369,52 @@ export class PiAgent {
     const key = String(chatId);
     const entry = this.sessions.get(key);
     if (entry) {
+      for (const listener of this.sessionListeners) {
+        try {
+          listener({
+            session: null,
+            sessionManager: entry.sessionManager,
+            chatId: key,
+            disposed: true,
+          });
+        } catch (error) {
+          logger.warn("Session listener error", error);
+        }
+      }
+
       entry.session.dispose();
       this.sessions.delete(key);
       logger.info(`Disposed live session for chat ${key}`);
     }
   }
 
+  onSessionCreated(listener) {
+    this.sessionListeners.add(listener);
+  }
+
   /**
    * Dispose all live sessions and close the database.
    */
   dispose() {
-    for (const [key, entry] of this.sessions) {
+    for (const [key, entry] of [...this.sessions]) {
       try {
+        for (const listener of this.sessionListeners) {
+          try {
+            listener({
+              session: null,
+              sessionManager: entry.sessionManager,
+              chatId: key,
+              disposed: true,
+            });
+          } catch (listenerError) {
+            logger.warn("Session listener error", listenerError);
+          }
+        }
         entry.session.dispose();
       } catch (error) {
         logger.warn(`Error disposing session ${key}:`, error);
       }
+      this.sessions.delete(key);
     }
     this.sessions.clear();
     this.store.close();

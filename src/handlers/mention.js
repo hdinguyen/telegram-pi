@@ -1,7 +1,25 @@
 import { logger } from "../utils/logger.js";
 import { piAgent } from "../agent/index.js";
 import { getAgentOptions } from "../agent/config.js";
+import {
+  registerImagePayloads,
+  clearImagePayloads,
+} from "../agent/vision-store.js";
 import { replyWithMarkdown } from "../utils/telegram-format.js";
+
+function formatCoordinate(value, precision = 5) {
+  if (typeof value === "number") {
+    return value.toFixed(precision);
+  }
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric.toFixed(precision);
+    }
+    return value;
+  }
+  return "";
+}
 
 const TELEGRAM_MESSAGE_LIMIT = 4000;
 
@@ -139,7 +157,8 @@ ${originalResponse}
  */
 export async function mentionHandler(msg, ctx, mentions) {
   const chatId = msg.chat.id;
-  const text = msg.text || "";
+  const text = msg.text || msg.caption || "";
+  const location = msg.location;
   const username = msg.from.username || msg.from.first_name || "User";
   const chatType = msg.chat.type;
   const chatTitle = msg.chat.title || "Direct Chat";
@@ -150,6 +169,8 @@ export async function mentionHandler(msg, ctx, mentions) {
     chatTitle,
     from: username,
     text: text.substring(0, 100),
+    hasPhoto: !!(msg.photo && msg.photo.length),
+    hasLocation: !!location,
     mentionsCount: mentions?.length || 0,
     mentions: mentions?.map((m) => m.fragment) || [],
   });
@@ -161,7 +182,126 @@ export async function mentionHandler(msg, ctx, mentions) {
   const botUsername = ctx.botUsername;
 
   // Extract the actual query by removing bot mentions
-  const query = extractQueryFromMention(text, botUsername);
+  const baseQuery = extractQueryFromMention(text, botUsername);
+
+  let locationSummary = null;
+  if (location) {
+    const lat = formatCoordinate(location.latitude);
+    const lon = formatCoordinate(location.longitude);
+    const venue = msg.venue;
+    const venueParts = [];
+    if (venue?.title) venueParts.push(venue.title);
+    if (venue?.address) venueParts.push(venue.address);
+    const venueSuffix = venueParts.length ? ` • ${venueParts.join(" — ")}` : "";
+    locationSummary = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      text: `[Location: ${lat}, ${lon}]${venueSuffix}`,
+      horizontalAccuracy: location.horizontal_accuracy,
+      livePeriod: location.live_period,
+      heading: location.heading,
+      proximityAlertRadius: location.proximity_alert_radius,
+      venue: venue
+        ? {
+            title: venue.title,
+            address: venue.address,
+            foursquareId: venue.foursquare_id,
+            foursquareType: venue.foursquare_type,
+            googlePlaceId: venue.google_place_id,
+            googlePlaceType: venue.google_place_type,
+          }
+        : undefined,
+    };
+  }
+
+  if (locationSummary) {
+    logger.info("📍 Location shared in message", {
+      chatId,
+      text: locationSummary.text,
+      latitude: locationSummary.latitude,
+      longitude: locationSummary.longitude,
+      horizontalAccuracy: locationSummary.horizontalAccuracy,
+      livePeriod: locationSummary.livePeriod,
+      heading: locationSummary.heading,
+      proximityAlertRadius: locationSummary.proximityAlertRadius,
+      venue: locationSummary.venue,
+    });
+  }
+
+  const querySegments = [];
+  if (baseQuery) {
+    querySegments.push(baseQuery);
+  }
+
+  if (locationSummary) {
+    const locationLines = [`Location shared by user: ${locationSummary.text}`];
+
+    if (typeof locationSummary.horizontalAccuracy === "number") {
+      locationLines.push(
+        `Horizontal accuracy: ${locationSummary.horizontalAccuracy} meters`,
+      );
+    }
+    if (typeof locationSummary.livePeriod === "number") {
+      locationLines.push(
+        `Live location remaining: ${Math.round(locationSummary.livePeriod)} seconds`,
+      );
+    }
+    if (typeof locationSummary.heading === "number") {
+      locationLines.push(`Heading: ${locationSummary.heading}°`);
+    }
+    if (typeof locationSummary.proximityAlertRadius === "number") {
+      locationLines.push(
+        `Proximity alert radius: ${locationSummary.proximityAlertRadius} meters`,
+      );
+    }
+
+    if (locationSummary.venue) {
+      const venueLines = [];
+      if (locationSummary.venue.title) {
+        venueLines.push(`Title: ${locationSummary.venue.title}`);
+      }
+      if (locationSummary.venue.address) {
+        venueLines.push(`Address: ${locationSummary.venue.address}`);
+      }
+      if (venueLines.length > 0) {
+        locationLines.push(`Venue details:\n${venueLines.join("\n")}`);
+      }
+    }
+
+    querySegments.push(locationLines.join("\n"));
+  }
+
+  const query = querySegments.join(querySegments.length > 1 ? "\n\n" : "");
+
+  // Attach inline photo payloads if present
+  let imageIds = [];
+  if (msg.photo && msg.photo.length > 0) {
+    const largestPhoto = msg.photo[msg.photo.length - 1];
+    const imageId = `${msg.chat.id}:${msg.message_id}:${largestPhoto.file_unique_id}`;
+    registerImagePayloads([
+      {
+        id: imageId,
+        data: {
+          telegramFileId: largestPhoto.file_id,
+          width: largestPhoto.width,
+          height: largestPhoto.height,
+          caption: msg.caption || undefined,
+          chatId: msg.chat.id,
+          messageId: msg.message_id,
+        },
+      },
+    ]);
+
+    // Schedule a cleanup in case the agent never requests the image
+    setTimeout(
+      () => {
+        clearImagePayloads([imageId]);
+      },
+      10 * 60 * 1000,
+    );
+
+    imageIds = [imageId];
+  }
 
   logger.info("📝 Extracted query from mention", {
     original: text.substring(0, 100),
@@ -177,6 +317,8 @@ export async function mentionHandler(msg, ctx, mentions) {
     chatType,
     username,
     chatTitle,
+    imageIds,
+    location: locationSummary,
   };
 
   let response;
@@ -224,10 +366,9 @@ export async function mentionHandler(msg, ctx, mentions) {
   }
 
   if (!response) {
-    await ctx.reply(
-      "⚠️ I couldn't generate a response. Please try again.",
-      { reply_to_message_id: msg.message_id },
-    );
+    await ctx.reply("⚠️ I couldn't generate a response. Please try again.", {
+      reply_to_message_id: msg.message_id,
+    });
     return;
   }
 

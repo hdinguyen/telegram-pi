@@ -10,6 +10,9 @@
     "npm:pi-web-access@latest",
     "npm:pi-blackhole",
     "npm:pi-lynx"
+  ],
+  "extensions": [
+    "./extensions/vision-openrouter/index.js"
   ]
 }
 

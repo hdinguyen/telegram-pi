@@ -1,5 +1,8 @@
 import { createBot } from "./core/telegram.js";
 import { registerHandlers } from "./handlers/index.js";
+import { piAgent } from "./agent/index.js";
+import { getAgentOptions } from "./agent/config.js";
+import { registerTelegramHooks } from "./agent/hooks/telegram-hooks.js";
 import { logger } from "./utils/logger.js";
 
 /**
@@ -23,11 +26,20 @@ class TeleBot {
         historySize: 50, // Track last 50 messages
       });
 
+      // Initialize Pi agent once bot is ready
+      await piAgent.initialize(getAgentOptions());
+
+      // Register session-level Telegram hooks for extensions
+      const telegraf = this.bot.getInstance();
+      piAgent.onSessionCreated(({ session, sessionManager }) => {
+        registerTelegramHooks({ session, sessionManager }, telegraf);
+      });
+
       // Add middleware to attach recent messages to context
       this._setupContextEnhancement();
 
       // Register handlers
-      registerHandlers(this.bot);
+      registerHandlers(telegraf);
 
       // Start polling
       await this.bot.startPolling();
