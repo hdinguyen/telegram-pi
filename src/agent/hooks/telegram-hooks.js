@@ -1,27 +1,9 @@
-import { Telegraf } from "telegraf";
+import { registerVisionBridge } from "../vision-bridge.js";
 
 /**
- * Registers an extension hook so tools can resolve telegram file metadata.
- * @param {import("@earendil-works/pi-coding-agent").AgentSession} session
- * @param {Telegraf} telegraf
+ * Backward-compatible wrapper for older code paths.
+ * New integrations should call PiAgent.registerTelegramBridge(telegraf).
  */
-export function registerTelegramHooks(session, telegraf) {
-  if (!telegraf) {
-    throw new Error("registerTelegramHooks requires a Telegraf instance");
-  }
-
-  if (session.extensions.has("session_fetch_telegram_file")) {
-    return;
-  }
-
-  session.extensions.register(
-    "session_fetch_telegram_file",
-    async (fileId) => {
-      if (!fileId) {
-        throw new Error("telegram fileId is required");
-      }
-      const file = await telegraf.telegram.getFile(fileId);
-      return file;
-    },
-  );
+export function registerTelegramHooks({ eventBus }, telegraf) {
+  return registerVisionBridge({ eventBus, telegraf });
 }

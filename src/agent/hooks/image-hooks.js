@@ -1,15 +1,8 @@
-import { getImagePayloads } from "../vision-store.js";
-
 /**
- * Registers internal extension hooks for sharing Telegram image metadata
- * with project extensions (e.g. OpenRouter vision tool).
+ * Deprecated compatibility shim.
+ * Image payload access is now provided through src/agent/vision-bridge.js and
+ * the shared pi event bus instead of unsupported session.extensions hooks.
  */
-export function registerImageHooks(session) {
-  // Provide a hook the extension can call to read stored payloads
-  session.extensions.register("session_fetch_image_payloads", async (ids) => {
-    if (!Array.isArray(ids)) {
-      return [];
-    }
-    return getImagePayloads(ids, { consume: false });
-  });
+export function registerImageHooks() {
+  return [];
 }

@@ -2,7 +2,6 @@ import { createBot } from "./core/telegram.js";
 import { registerHandlers } from "./handlers/index.js";
 import { piAgent } from "./agent/index.js";
 import { getAgentOptions } from "./agent/config.js";
-import { registerTelegramHooks } from "./agent/hooks/telegram-hooks.js";
 import { logger } from "./utils/logger.js";
 
 /**
@@ -29,17 +28,17 @@ class TeleBot {
       // Initialize Pi agent once bot is ready
       await piAgent.initialize(getAgentOptions());
 
-      // Register session-level Telegram hooks for extensions
+      // Register the bot-side bridge used by vision extensions to resolve
+      // Telegram file metadata when the agent calls openrouter_vision.
       const telegraf = this.bot.getInstance();
-      piAgent.onSessionCreated(({ session, sessionManager }) => {
-        registerTelegramHooks({ session, sessionManager }, telegraf);
-      });
+      piAgent.registerTelegramBridge(telegraf);
 
       // Add middleware to attach recent messages to context
       this._setupContextEnhancement();
 
-      // Register handlers
-      registerHandlers(telegraf);
+      // Register handlers on the TelegramBot wrapper so handler modules can
+      // access wrapper helpers such as onMention() and getInstance().
+      registerHandlers(this.bot);
 
       // Start polling
       await this.bot.startPolling();

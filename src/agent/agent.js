@@ -5,6 +5,8 @@ import {
 import { existsSync, mkdirSync } from "node:fs";
 import { logger } from "../utils/logger.js";
 import { sessionStore } from "../db/database.js";
+import { describeImagePayload } from "./vision-store.js";
+import { registerVisionBridge } from "./vision-bridge.js";
 
 /**
  * Pi Agent wrapper for Telegram bot integration.
@@ -24,6 +26,8 @@ export class PiAgent {
     this.loader = null;
     this.cwd = null;
     this.sessionDir = null;
+    this.eventBus = null;
+    this.visionBridgeUnsubscribers = [];
     this.store = sessionStore;
     this.isInitialized = false;
 
@@ -45,10 +49,11 @@ export class PiAgent {
     }
 
     try {
-      const { loader, cwd, sessionDir } = options;
+      const { loader, cwd, sessionDir, eventBus } = options;
       this.loader = loader;
       this.cwd = cwd;
       this.sessionDir = sessionDir;
+      this.eventBus = eventBus;
 
       // Ensure the directory that holds per-group session files exists.
       if (!existsSync(this.sessionDir)) {
@@ -68,6 +73,15 @@ export class PiAgent {
       );
       if (diagnostics.length > 0) {
         logger.warn("Skill diagnostics:", diagnostics);
+      }
+
+      const { extensions, errors } = this.loader.getExtensions();
+      logger.info(
+        "Loaded extensions:",
+        extensions.map((extension) => extension.name || extension.path),
+      );
+      if (errors.length > 0) {
+        logger.warn("Extension diagnostics:", errors);
       }
 
       this.isInitialized = true;
@@ -182,16 +196,6 @@ export class PiAgent {
 
       const enhancedPrompt = this._buildPromptWithContext(query, context);
 
-      if (
-        context.imageIds &&
-        Array.isArray(context.imageIds) &&
-        context.imageIds.length > 0
-      ) {
-        session.context.set("telegramImageIds", context.imageIds);
-      } else {
-        session.context.delete("telegramImageIds");
-      }
-
       let responseText = "";
       const toolsUsed = [];
 
@@ -278,6 +282,30 @@ export class PiAgent {
         parts.push(`${sender}: ${contentLine}`);
       }
       parts.push("</conversation_history>\n");
+    }
+
+    if (
+      context.imageIds &&
+      Array.isArray(context.imageIds) &&
+      context.imageIds.length > 0
+    ) {
+      parts.push("\n<attached_images>");
+      for (const imageId of context.imageIds) {
+        const description = describeImagePayload(imageId);
+        const details = [];
+        if (description?.dimensions) {
+          details.push(`dimensions: ${description.dimensions}`);
+        }
+        if (description?.sizeKb) {
+          details.push(`size: ${description.sizeKb}KB`);
+        }
+        const detailText = details.length > 0 ? ` (${details.join(", ")})` : "";
+        parts.push(`- imageId: ${imageId}${detailText}`);
+      }
+      parts.push(
+        "Use the openrouter_vision tool with the imageId above when the user asks about the attached image, needs OCR/extraction, or references what is shown. Pass the user's image-related request as the tool prompt.",
+      );
+      parts.push("</attached_images>\n");
     }
 
     if (context.location && context.location.text) {
@@ -393,6 +421,28 @@ export class PiAgent {
   }
 
   /**
+   * Register app-side bridge handlers used by extensions to fetch Telegram
+   * image metadata and file paths.
+   * @param {import("telegraf").Telegraf} telegraf
+   */
+  registerTelegramBridge(telegraf) {
+    if (!this.eventBus) {
+      throw new Error("Agent event bus is not initialized");
+    }
+
+    for (const unsubscribe of this.visionBridgeUnsubscribers) {
+      unsubscribe();
+    }
+
+    this.visionBridgeUnsubscribers = registerVisionBridge({
+      eventBus: this.eventBus,
+      telegraf,
+    });
+
+    logger.info("Registered Telegram vision bridge for agent extensions");
+  }
+
+  /**
    * Dispose all live sessions and close the database.
    */
   dispose() {
@@ -417,6 +467,14 @@ export class PiAgent {
       this.sessions.delete(key);
     }
     this.sessions.clear();
+    for (const unsubscribe of this.visionBridgeUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        logger.warn("Error unregistering vision bridge:", error);
+      }
+    }
+    this.visionBridgeUnsubscribers = [];
     this.store.close();
     this.isInitialized = false;
     logger.info("All agent sessions disposed");

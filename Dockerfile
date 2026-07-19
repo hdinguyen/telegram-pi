@@ -17,8 +17,9 @@ COPY ./init/APPEND_SYSTEM.md /app/.pi/APPEND_SYSTEM.md
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Copy application source
+# Copy application source and project extensions
 COPY src ./src
+COPY extensions ./extensions
 
 ENV NODE_ENV=production
 

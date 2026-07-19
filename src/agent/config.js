@@ -1,4 +1,5 @@
 import {
+  createEventBus,
   DefaultResourceLoader,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
@@ -20,13 +21,25 @@ export function getAgentOptions() {
   const cwd = process.cwd();
   const agentDir = getAgentDir();
   const sessionDir = getSessionDir();
+  const eventBus = createEventBus();
+  const visionExtensionPath = resolve(
+    cwd,
+    "extensions/vision-openrouter/index.js",
+  );
 
-  logger.debug("Agent configuration", { cwd, agentDir, sessionDir });
+  logger.debug("Agent configuration", {
+    cwd,
+    agentDir,
+    sessionDir,
+    visionExtensionPath,
+  });
 
   // Create resource loader with custom prompt additions
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
+    eventBus,
+    additionalExtensionPaths: [visionExtensionPath],
     // Append instructions to the default prompt
     appendSystemPromptOverride: (base) => [
       ...base,
@@ -41,6 +54,7 @@ You are a helpful assistant integrated with a Telegram bot. When responding:
 - Be conversational and friendly, matching the informal nature of chat
 - Consider the conversation history provided in the context
 - When asked about specific topics, leverage available skills for accurate information
+- When the current message includes an attached Telegram image ID, use the \`openrouter_vision\` tool for image description, OCR, extraction, or any question that depends on the image contents. Do not claim to inspect image pixels before the tool returns.
 
 ## Response Guidelines
 
@@ -68,5 +82,7 @@ You are a helpful assistant integrated with a Telegram bot. When responding:
     cwd,
     agentDir,
     sessionDir,
+    eventBus,
+    visionExtensionPath,
   };
 }
