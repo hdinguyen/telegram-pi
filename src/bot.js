@@ -3,6 +3,7 @@ import { registerHandlers } from "./handlers/index.js";
 import { piAgent } from "./agent/index.js";
 import { getAgentOptions } from "./agent/config.js";
 import { logger } from "./utils/logger.js";
+import { reminderService } from "./reminders/reminder-service.js";
 
 /**
  * Initialize and configure the Telegram bot
@@ -86,6 +87,25 @@ class TeleBot {
    */
   getBot() {
     return this.bot;
+  }
+
+  /**
+   * Reminder helpers (proxy to reminderService)
+   */
+  createReminder(options) {
+    return reminderService.createReminder(options);
+  }
+
+  listReminders(chatId) {
+    return reminderService.listReminders(chatId);
+  }
+
+  deleteReminder(reminderId, options) {
+    return reminderService.deleteReminder(reminderId, options);
+  }
+
+  acknowledgeReminderOccurrence(occurrenceId) {
+    return reminderService.acknowledgeOccurrence(occurrenceId);
   }
 }
 

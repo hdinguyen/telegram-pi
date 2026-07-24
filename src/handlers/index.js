@@ -1,5 +1,7 @@
 import { mentionHandler } from "./mention.js";
 import { registerAdminCommands } from "./admin.js";
+import { registerReminderHandlers } from "./reminders.js";
+import { registerDistillHandler } from "./distill.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -12,6 +14,12 @@ export function registerHandlers(bot) {
   // Commands are registered before the catch-all mention handler so they
   // take precedence over generic text handling.
   registerAdminCommands(bot);
+
+  // Register reminder commands
+  registerReminderHandlers(bot);
+
+  // Register memory distillation command
+  registerDistillHandler(bot);
 
   // Register mention handler
   bot.onMention(mentionHandler);

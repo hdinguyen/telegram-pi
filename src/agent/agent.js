@@ -7,6 +7,7 @@ import { logger } from "../utils/logger.js";
 import { sessionStore } from "../db/database.js";
 import { describeImagePayload } from "./vision-store.js";
 import { registerVisionBridge } from "./vision-bridge.js";
+import { reminderService } from "../reminders/reminder-service.js";
 
 /**
  * Pi Agent wrapper for Telegram bot integration.
@@ -495,5 +496,24 @@ export class PiAgent {
           description: s.description,
         })) || [],
     };
+  }
+
+  /**
+   * Reminder helpers (proxy to reminderService)
+   */
+  createReminder(options) {
+    return reminderService.createReminder(options);
+  }
+
+  listReminders(chatId) {
+    return reminderService.listReminders(chatId);
+  }
+
+  deleteReminder(reminderId, options) {
+    return reminderService.deleteReminder(reminderId, options);
+  }
+
+  acknowledgeReminderOccurrence(occurrenceId) {
+    return reminderService.acknowledgeOccurrence(occurrenceId);
   }
 }

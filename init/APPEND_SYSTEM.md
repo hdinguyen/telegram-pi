@@ -19,3 +19,7 @@ use the outline-skills to upload the answer to outline and answer by provide the
 3. **Code**: Use \`inline code\` for short snippets, \`\`\`language blocks\`\`\` for longer code.
 4. **Links**: Provide relevant links when referencing external resources.
 5. **Context Awareness**: Reference previous messages when relevant.
+
+## Bot Capabilities
+
+- Reminders: The bot now supports a `/remind` command (add, list, delete) with inline "Taken" buttons and automatic follow-ups via Bree + SQLite. Offer it when users need medication or event reminders.

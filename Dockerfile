@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install pi and required extensions
 # ffmpeg + yt-dlp are runtime deps for pi-web-access video/YouTube features
-RUN apk add --no-cache curl bash ffmpeg yt-dlp \
+RUN apk add --no-cache curl bash ffmpeg yt-dlp python3 make g++ \
     && curl -fsSL https://pi.dev/install.sh | sh
 
 ENV PI_CODING_AGENT_DIR=/app/.pi

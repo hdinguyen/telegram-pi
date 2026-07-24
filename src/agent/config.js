@@ -39,7 +39,10 @@ export function getAgentOptions() {
     cwd,
     agentDir,
     eventBus,
-    additionalExtensionPaths: [visionExtensionPath],
+    additionalExtensionPaths: [
+      visionExtensionPath,
+      resolve(cwd, "src/agent/extensions/reminders.js"),
+    ],
     // Append instructions to the default prompt
     appendSystemPromptOverride: (base) => [
       ...base,
